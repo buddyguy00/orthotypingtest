@@ -3,30 +3,32 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>OrthoTypingTest</title>
+  <title>OrthoTyping Assessment</title>
   <style>
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.5; background: #f7f7f7; }
-    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 20px; }
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 32px auto; padding: 18px; line-height: 1.5; background: #f7f7f7; }
+    .card { background: white; padding: 24px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); margin-bottom: 20px; }
     label { font-weight: bold; display: block; margin-top: 12px; }
-    input, textarea, select, button { width: 100%; padding: 10px; margin-top: 6px; font-size: 16px; box-sizing: border-box; }
-    textarea { min-height: 160px; resize: vertical; }
-    #promptText { background: #f0f0f0; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-size: 18px; }
-    button { cursor: pointer; border: none; border-radius: 8px; margin-top: 16px; background: #222; color: white; font-weight: bold; }
-    button.secondary { background: #666; }
-    .results { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    input, textarea, select, button { width: 100%; padding: 11px; margin-top: 6px; font-size: 16px; box-sizing: border-box; }
+    input[readonly] { background: #eee; }
+    textarea { min-height: 190px; resize: vertical; }
+    #promptText { background: #f0f0f0; padding: 16px; border-radius: 8px; white-space: pre-wrap; font-size: 18px; min-height: 100px; }
+    button { cursor: pointer; border: 0; border-radius: 8px; margin-top: 16px; background: #222; color: white; font-weight: bold; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .results { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; }
     .metric { background: #f2f2f2; padding: 12px; border-radius: 8px; }
-    .warning { color: #a00000; font-weight: bold; }
-    .success { color: #007000; font-weight: bold; }
+    .status { font-weight: bold; }
+    .error { color: #a00000; }
+    .success { color: #176b2c; }
+    .small { font-size: 14px; color: #444; }
   </style>
 </head>
 <body>
-
   <div class="card">
-    <h1>OrthoTypingTest</h1>
-    <p>De-identified typing assessment. Do not enter patient names, MRNs, DOBs, or other PHI. Backspace and Delete are disabled in the typing field.</p>
+    <h1>OrthoTyping Assessment</h1>
+    <p class="small">Use only a de-identified Study ID. Do not place names, medical record numbers, dates of birth, or other PHI in the link.</p>
 
     <label for="studyId">Study ID</label>
-    <input id="studyId" placeholder="Example: UE001" />
+    <input id="studyId" readonly />
 
     <label for="visit">Visit</label>
     <select id="visit">
@@ -37,105 +39,138 @@
       <option value="Other">Other</option>
     </select>
 
-    <label for="customPrompt">Prompt Text</label>
-    <textarea id="customPrompt">The quick brown fox jumps over the lazy dog. This typing task is designed to assess typing speed, accuracy, and functional keyboard performance.</textarea>
-
-    <button onclick="loadPrompt()">Load Prompt / Reset Test</button>
+    <button id="beginButton" onclick="beginAssessment()">Begin Assessment</button>
+    <p id="setupStatus" class="status"></p>
   </div>
 
   <div class="card">
     <h2>Prompt</h2>
-    <div id="promptText"></div>
+    <div id="promptText">Select the visit and press “Begin Assessment.”</div>
 
-    <label for="typedText">Patient Typed Response</label>
-    <textarea id="typedText" placeholder="Patient begins typing here..." disabled></textarea>
+    <label for="typedText">Typed Response</label>
+    <textarea id="typedText" placeholder="Begin typing here..." disabled></textarea>
 
-    <button onclick="submitTest()">Submit Test</button>
-    <p id="status" class="warning"></p>
+    <button id="submitButton" onclick="submitTest()" disabled>Submit Test</button>
+    <p id="testStatus" class="status"></p>
   </div>
 
-  <div class="card">
+  <div class="card" id="resultsCard" hidden>
     <h2>Results</h2>
     <div class="results">
-      <div class="metric"><strong>Time:</strong><br><span id="timeResult">—</span></div>
-      <div class="metric"><strong>WPM:</strong><br><span id="wpmResult">—</span></div>
-      <div class="metric"><strong>Accuracy:</strong><br><span id="accuracyResult">—</span></div>
-      <div class="metric"><strong>Error Count:</strong><br><span id="errorResult">—</span></div>
-      <div class="metric"><strong>Correct Characters:</strong><br><span id="correctResult">—</span></div>
-      <div class="metric"><strong>Total Typed:</strong><br><span id="typedResult">—</span></div>
+      <div class="metric"><strong>Time</strong><br><span id="timeResult">—</span></div>
+      <div class="metric"><strong>WPM</strong><br><span id="wpmResult">—</span></div>
+      <div class="metric"><strong>Accuracy</strong><br><span id="accuracyResult">—</span></div>
+      <div class="metric"><strong>Errors</strong><br><span id="errorResult">—</span></div>
+      <div class="metric"><strong>Prompt ID</strong><br><span id="promptIdResult">—</span></div>
     </div>
-
-    <button class="secondary" onclick="downloadCSV()">Download Backup CSV</button>
   </div>
 
 <script>
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzh4JiznkUgiWW2VCUgRN1QSZ0VvkZlnaeG83WwJWPbYWBRW9mSsjMxfMhkV4ZVYKTq/exec";
+// Replace this with the /exec URL from your deployed Google Apps Script web app.
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzh4JiznkUgiWW2VCUgRN1QSZ0VvkZlnaeG83WwJWPbYWBRW9mSsjMxfMhkV4ZVYKTq/exec";
 
 let targetPrompt = "";
+let promptId = "";
+let assignmentId = "";
 let startTime = null;
-let endTime = null;
-let results = [];
+let submitted = false;
 
 const typedBox = document.getElementById("typedText");
+const studyIdBox = document.getElementById("studyId");
 
-function loadPrompt() {
-  targetPrompt = document.getElementById("customPrompt").value.trim();
-  document.getElementById("promptText").innerText = targetPrompt;
-  typedBox.value = "";
-  typedBox.disabled = false;
-  typedBox.focus();
-  startTime = null;
-  endTime = null;
-  document.getElementById("status").className = "warning";
-  document.getElementById("status").innerText = "Ready. Timer starts on first keystroke.";
-  clearDisplayedResults();
+function getStudyIdFromUrl() {
+  const id = new URLSearchParams(window.location.search).get("id");
+  studyIdBox.value = id ? id.trim().toUpperCase() : "";
+  if (!id) {
+    document.getElementById("setupStatus").textContent = "This link is missing a Study ID. Ask the study team for the correct participant-specific link.";
+    document.getElementById("setupStatus").className = "status error";
+    document.getElementById("beginButton").disabled = true;
+  }
 }
 
-typedBox.addEventListener("keydown", function(event) {
-  if (event.key === "Backspace" || event.key === "Delete") {
-    event.preventDefault();
-    document.getElementById("status").className = "warning";
-    document.getElementById("status").innerText = "Backspace/Delete is disabled.";
+async function beginAssessment() {
+  const studyId = studyIdBox.value;
+  const visit = document.getElementById("visit").value;
+  const button = document.getElementById("beginButton");
+
+  if (!studyId) return;
+  if (SCRIPT_URL.includes("PASTE_YOUR")) {
+    alert("Add your Google Apps Script /exec URL to index.html first.");
     return;
   }
 
+  button.disabled = true;
+  document.getElementById("visit").disabled = true;
+  setSetupStatus("Assigning an unused prompt...", "");
+
+  try {
+    const url = `${SCRIPT_URL}?action=assignPrompt&study_id=${encodeURIComponent(studyId)}&visit=${encodeURIComponent(visit)}`;
+    const response = await fetch(url, { method: "GET", redirect: "follow" });
+    const data = await response.json();
+
+    if (!data.success) throw new Error(data.message || "Unable to assign a prompt.");
+
+    promptId = data.prompt_id;
+    targetPrompt = data.prompt_text;
+    assignmentId = data.assignment_id;
+
+    document.getElementById("promptText").textContent = targetPrompt;
+    typedBox.disabled = false;
+    typedBox.value = "";
+    typedBox.focus();
+    document.getElementById("submitButton").disabled = false;
+    setSetupStatus(`Prompt assigned.`, "success");
+    document.getElementById("testStatus").textContent = "Timer starts on the first typed character. Backspace and Delete are disabled.";
+  } catch (error) {
+    setSetupStatus(error.message, "error");
+    button.disabled = false;
+    document.getElementById("visit").disabled = false;
+  }
+}
+
+typedBox.addEventListener("keydown", event => {
+  if (event.key === "Backspace" || event.key === "Delete") {
+    event.preventDefault();
+    document.getElementById("testStatus").textContent = "Backspace and Delete are disabled.";
+    document.getElementById("testStatus").className = "status error";
+    return;
+  }
   if (!startTime && event.key.length === 1) {
     startTime = new Date();
-    document.getElementById("status").className = "warning";
-    document.getElementById("status").innerText = "Test in progress...";
+    document.getElementById("testStatus").textContent = "Assessment in progress...";
+    document.getElementById("testStatus").className = "status";
   }
 });
 
+// Also blocks common mobile/browser editing paths.
+typedBox.addEventListener("beforeinput", event => {
+  if (event.inputType && event.inputType.startsWith("delete")) event.preventDefault();
+});
+
+typedBox.addEventListener("paste", event => event.preventDefault());
+typedBox.addEventListener("drop", event => event.preventDefault());
+
 async function submitTest() {
-  const studyId = document.getElementById("studyId").value.trim();
-  const visit = document.getElementById("visit").value;
-  const typedText = typedBox.value;
-
-  if (!studyId) {
-    alert("Please enter a de-identified Study ID.");
-    return;
-  }
-
-  if (!targetPrompt) {
-    alert("Please load a prompt first.");
-    return;
-  }
-
+  if (submitted) return;
   if (!startTime) {
-    alert("No typing detected.");
+    alert("No typing was detected.");
     return;
   }
 
-  endTime = new Date();
+  const typedText = typedBox.value;
+  const endTime = new Date();
   const timeSec = (endTime - startTime) / 1000;
   const score = calculateScore(targetPrompt, typedText, timeSec);
 
   const record = {
-    study_id: studyId,
-    visit: visit,
-    test_datetime: new Date().toISOString(),
-    prompt: targetPrompt,
+    action: "saveResult",
+    assignment_id: assignmentId,
+    study_id: studyIdBox.value,
+    visit: document.getElementById("visit").value,
+    prompt_id: promptId,
+    prompt_text: targetPrompt,
     typed_response: typedText,
+    test_datetime: endTime.toISOString(),
     time_sec: timeSec.toFixed(2),
     wpm: score.wpm.toFixed(2),
     accuracy_percent: score.accuracy.toFixed(2),
@@ -145,97 +180,59 @@ async function submitTest() {
     prompt_length: targetPrompt.length
   };
 
-  results.push(record);
-  displayResults(record);
+  submitted = true;
   typedBox.disabled = true;
-
-  document.getElementById("status").className = "warning";
-  document.getElementById("status").innerText = "Submitting to Google Sheet...";
+  document.getElementById("submitButton").disabled = true;
+  document.getElementById("testStatus").textContent = "Saving results...";
+  document.getElementById("testStatus").className = "status";
 
   try {
-    await fetch(GOOGLE_SCRIPT_URL, {
+    // text/plain avoids a browser CORS preflight while Apps Script still receives JSON text.
+    await fetch(SCRIPT_URL, {
       method: "POST",
       mode: "no-cors",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
       body: JSON.stringify(record)
     });
 
-    document.getElementById("status").className = "success";
-    document.getElementById("status").innerText = "Submission complete. Results were sent to the Google Sheet.";
+    displayResults(record);
+    document.getElementById("testStatus").textContent = "Assessment submitted. You may now close this page.";
+    document.getElementById("testStatus").className = "status success";
   } catch (error) {
-    document.getElementById("status").className = "warning";
-    document.getElementById("status").innerText = "Submission failed. Please use Download Backup CSV.";
-    console.error(error);
+    submitted = false;
+    typedBox.disabled = false;
+    document.getElementById("submitButton").disabled = false;
+    document.getElementById("testStatus").textContent = "The result could not be sent. Check the internet connection and submit again.";
+    document.getElementById("testStatus").className = "status error";
   }
 }
 
 function calculateScore(prompt, typed, timeSec) {
   let correct = 0;
-  let errors = 0;
   const maxLen = Math.max(prompt.length, typed.length);
-
-  for (let i = 0; i < maxLen; i++) {
-    if (typed[i] === prompt[i]) {
-      correct++;
-    } else {
-      errors++;
-    }
-  }
-
-  const accuracy = maxLen > 0 ? (correct / maxLen) * 100 : 0;
-  const wordsTyped = typed.length / 5;
-  const minutes = timeSec / 60;
-  const wpm = minutes > 0 ? wordsTyped / minutes : 0;
-
+  for (let i = 0; i < maxLen; i++) if (typed[i] === prompt[i]) correct++;
+  const errors = maxLen - correct;
+  const accuracy = maxLen ? (correct / maxLen) * 100 : 0;
+  const wpm = timeSec > 0 ? (typed.length / 5) / (timeSec / 60) : 0;
   return { correct, errors, accuracy, wpm };
 }
 
 function displayResults(record) {
-  document.getElementById("timeResult").innerText = record.time_sec + " sec";
-  document.getElementById("wpmResult").innerText = record.wpm;
-  document.getElementById("accuracyResult").innerText = record.accuracy_percent + "%";
-  document.getElementById("errorResult").innerText = record.error_count;
-  document.getElementById("correctResult").innerText = record.correct_characters;
-  document.getElementById("typedResult").innerText = record.total_typed_characters;
+  document.getElementById("resultsCard").hidden = false;
+  document.getElementById("timeResult").textContent = `${record.time_sec} sec`;
+  document.getElementById("wpmResult").textContent = record.wpm;
+  document.getElementById("accuracyResult").textContent = `${record.accuracy_percent}%`;
+  document.getElementById("errorResult").textContent = record.error_count;
+  document.getElementById("promptIdResult").textContent = record.prompt_id;
 }
 
-function clearDisplayedResults() {
-  document.getElementById("timeResult").innerText = "—";
-  document.getElementById("wpmResult").innerText = "—";
-  document.getElementById("accuracyResult").innerText = "—";
-  document.getElementById("errorResult").innerText = "—";
-  document.getElementById("correctResult").innerText = "—";
-  document.getElementById("typedResult").innerText = "—";
+function setSetupStatus(message, type) {
+  const el = document.getElementById("setupStatus");
+  el.textContent = message;
+  el.className = `status ${type}`;
 }
 
-function downloadCSV() {
-  if (results.length === 0) {
-    alert("No results to download.");
-    return;
-  }
-
-  const headers = Object.keys(results[0]);
-  const rows = results.map(row =>
-    headers.map(header => {
-      const value = String(row[header]).replace(/"/g, '""');
-      return `"${value}"`;
-    }).join(",")
-  );
-
-  const csv = [headers.join(","), ...rows].join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "typing_assessment_results.csv";
-  a.click();
-
-  URL.revokeObjectURL(url);
-}
-
-loadPrompt();
+getStudyIdFromUrl();
 </script>
-
 </body>
 </html>
