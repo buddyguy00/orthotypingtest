@@ -2,54 +2,325 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>OrthoTyping Assessment</title>
   <style>
-    html, body { margin: 0; min-height: 100%; }
-    body { font-family: Arial, sans-serif; max-width: 900px; margin: 0 auto; padding: 12px; line-height: 1.4; background: #f7f7f7; }
-    .card { background: white; padding: 16px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,.08); margin-bottom: 12px; }
-    label { font-weight: bold; display: block; margin-top: 12px; }
-    input, select, button { width: 100%; padding: 12px; margin-top: 6px; font-size: 16px; box-sizing: border-box; }
-    input[readonly] { background: #eee; }
-    #promptText {
-      background: #f0f0f0;
-      padding: 14px;
-      border-radius: 8px;
-      white-space: pre-wrap;
+    :root {
+      --app-height: 100dvh;
+      --ink: #171717;
+      --muted: #666;
+      --panel: #ffffff;
+      --soft: #f1f2f4;
+      --line: #d9dde3;
+      --accent: #1769e0;
+      --good: #16723a;
+      --bad: #a40000;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      margin: 0;
+      width: 100%;
+      min-height: 100%;
+      background: #f4f5f7;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+      overflow: hidden;
+    }
+
+    button, input, select { font: inherit; }
+
+    .screen {
+      display: none;
+      height: var(--app-height);
+      min-height: 0;
+      padding: max(12px, env(safe-area-inset-top)) 14px max(12px, env(safe-area-inset-bottom));
+    }
+
+    .screen.active { display: flex; }
+
+    #welcomeScreen {
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+    }
+
+    .welcome-card, .complete-card {
+      width: min(100%, 520px);
+      background: var(--panel);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 8px 28px rgba(0,0,0,.09);
+    }
+
+    h1 { font-size: 28px; margin: 0 0 8px; }
+    h2 { font-size: 18px; margin: 0; }
+    p { margin: 8px 0; }
+
+    .small {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.45;
+    }
+
+    label {
+      display: block;
+      font-weight: 700;
+      margin-top: 16px;
+      margin-bottom: 6px;
+    }
+
+    input, select {
+      width: 100%;
+      min-height: 50px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 12px 14px;
+      background: white;
+      font-size: 17px;
+    }
+
+    input[readonly] { background: var(--soft); }
+
+    button {
+      width: 100%;
+      min-height: 52px;
+      border: 0;
+      border-radius: 13px;
+      padding: 12px 16px;
+      margin-top: 18px;
+      background: #1e1e1e;
+      color: white;
+      font-weight: 800;
       font-size: 18px;
-      line-height: 1.5;
-      height: 34vh;
-      min-height: 180px;
-      max-height: 310px;
+      cursor: pointer;
+    }
+
+    button:disabled { opacity: .5; cursor: not-allowed; }
+
+    .status {
+      min-height: 22px;
+      font-weight: 700;
+      font-size: 14px;
+      margin-top: 12px;
+    }
+
+    .error { color: var(--bad); }
+    .success { color: var(--good); }
+
+    #testScreen {
+      flex-direction: column;
+      gap: 9px;
+      overflow: hidden;
+    }
+
+    .test-header {
+      flex: 0 0 auto;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px 12px;
+      align-items: center;
+    }
+
+    .study-label {
+      font-size: 14px;
+      color: var(--muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .progress-number {
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .progress-track {
+      grid-column: 1 / -1;
+      height: 8px;
+      background: #e2e5e9;
+      border-radius: 99px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      background: var(--accent);
+      transition: width .12s linear;
+    }
+
+    .prompt-panel {
+      flex: 1 1 auto;
+      min-height: 92px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 13px 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .prompt-title {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+      margin-bottom: 8px;
+    }
+
+    #promptViewport {
+      flex: 1 1 auto;
+      min-height: 0;
       overflow-y: auto;
       overscroll-behavior: contain;
       -webkit-overflow-scrolling: touch;
+      scroll-behavior: smooth;
+      font-size: clamp(18px, 5vw, 22px);
+      line-height: 1.58;
+      padding-bottom: 35%;
     }
+
+    .prompt-word {
+      border-radius: 4px;
+      padding: 1px 0;
+    }
+
+    .prompt-word.completed {
+      color: #7a7f87;
+    }
+
+    .prompt-word.current {
+      background: #fff0a8;
+      color: #111;
+      outline: 2px solid rgba(235,185,0,.24);
+    }
+
+    .input-panel {
+      flex: 0 0 auto;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 15px;
+      padding: 11px 12px 12px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
     #typedText {
+      min-width: 0;
+      flex: 1 1 auto;
+      height: 50px;
       font-size: 18px;
-      line-height: 1.3;
       white-space: nowrap;
       overflow-x: auto;
     }
-    .test-card {
-      position: sticky;
-      bottom: 0;
-      z-index: 5;
+
+    #submitButton {
+      width: auto;
+      flex: 0 0 auto;
+      min-height: 50px;
+      margin: 0;
+      padding: 10px 15px;
+      font-size: 16px;
     }
-    button { cursor: pointer; border: 0; border-radius: 8px; margin-top: 16px; background: #222; color: white; font-weight: bold; }
-    button:disabled { opacity: .55; cursor: not-allowed; }
-    .results { display: grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap: 12px; }
-    .metric { background: #f2f2f2; padding: 12px; border-radius: 8px; }
-    .status { font-weight: bold; }
-    .error { color: #a00000; }
-    .success { color: #176b2c; }
-    .small { font-size: 14px; color: #444; }
+
+    .test-footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-top: 7px;
+    }
+
+    #testStatus {
+      flex: 1;
+      min-height: 18px;
+      margin: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    #characterCount {
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
+    }
+
+    #completeScreen {
+      align-items: center;
+      justify-content: center;
+      overflow-y: auto;
+    }
+
+    .check {
+      width: 62px;
+      height: 62px;
+      margin: 0 auto 14px;
+      border-radius: 50%;
+      background: #e8f7ed;
+      color: var(--good);
+      display: grid;
+      place-items: center;
+      font-size: 34px;
+      font-weight: 900;
+    }
+
+    .complete-card { text-align: center; }
+
+    .results {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+      margin-top: 18px;
+      text-align: left;
+    }
+
+    .metric {
+      background: var(--soft);
+      border-radius: 12px;
+      padding: 12px;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .metric span {
+      font-size: 21px;
+      font-weight: 800;
+    }
+
+    @media (max-height: 590px) {
+      .screen { padding-top: 6px; padding-bottom: 6px; }
+      .test-header { gap: 4px 10px; }
+      .progress-track { height: 6px; }
+      .prompt-panel { padding: 9px 11px; }
+      .prompt-title { margin-bottom: 3px; }
+      #promptViewport { line-height: 1.42; font-size: 17px; }
+      .input-panel { padding: 7px 8px; }
+      #typedText, #submitButton { height: 44px; min-height: 44px; }
+      #testStatus { display: none; }
+    }
   </style>
 </head>
 <body>
-  <div class="card">
+
+<section id="welcomeScreen" class="screen active">
+  <div class="welcome-card">
     <h1>OrthoTyping Assessment</h1>
-    <p class="small">Use only a de-identified Study ID. Do not place names, medical record numbers, dates of birth, or other PHI in the link.</p>
+    <p class="small">Use only the de-identified participant link provided by the study team.</p>
 
     <label for="studyId">Study ID</label>
     <input id="studyId" readonly />
@@ -63,45 +334,65 @@
       <option value="Other">Other</option>
     </select>
 
-    <button id="beginButton" onclick="beginAssessment()">Begin Assessment</button>
+    <button id="beginButton" type="button">Start Assessment</button>
     <p id="setupStatus" class="status"></p>
   </div>
+</section>
 
-  <div class="card test-card">
-    <h2>Prompt</h2>
-    <div id="promptText">Select the visit and press “Begin Assessment.”</div>
+<section id="testScreen" class="screen">
+  <header class="test-header">
+    <div id="testIdentity" class="study-label"></div>
+    <div id="progressNumber" class="progress-number">0%</div>
+    <div class="progress-track" aria-label="Assessment progress">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+  </header>
 
-    <label for="typedText">Typed Response</label>
-    <input
-      id="typedText"
-      type="text"
-      inputmode="text"
-      autocomplete="off"
-      autocapitalize="none"
-      autocorrect="off"
-      spellcheck="false"
-      enterkeyhint="done"
-      placeholder="Begin typing here..."
-      disabled
-    />
+  <main class="prompt-panel">
+    <div class="prompt-title">Reference text</div>
+    <div id="promptViewport" aria-live="off"></div>
+  </main>
 
-    <button id="submitButton" onclick="submitTest()" disabled>Submit Test</button>
-    <p id="testStatus" class="status"></p>
-  </div>
+  <footer class="input-panel">
+    <div class="input-row">
+      <input
+        id="typedText"
+        type="text"
+        inputmode="text"
+        autocomplete="off"
+        autocapitalize="none"
+        autocorrect="off"
+        spellcheck="false"
+        enterkeyhint="done"
+        aria-label="Typed response"
+        placeholder="Type here..."
+        disabled
+      />
+      <button id="submitButton" type="button" disabled>Submit</button>
+    </div>
+    <div class="test-footer">
+      <p id="testStatus">Backspace is disabled.</p>
+      <span id="characterCount">0 / 0</span>
+    </div>
+  </footer>
+</section>
 
-  <div class="card" id="resultsCard" hidden>
-    <h2>Results</h2>
+<section id="completeScreen" class="screen">
+  <div class="complete-card">
+    <div class="check">✓</div>
+    <h1>Assessment Complete</h1>
+    <p id="completionMessage" class="small">Your results have been submitted.</p>
+
     <div class="results">
-      <div class="metric"><strong>Time</strong><br><span id="timeResult">—</span></div>
-      <div class="metric"><strong>WPM</strong><br><span id="wpmResult">—</span></div>
-      <div class="metric"><strong>Accuracy</strong><br><span id="accuracyResult">—</span></div>
-      <div class="metric"><strong>Errors</strong><br><span id="errorResult">—</span></div>
-      <div class="metric"><strong>Prompt ID</strong><br><span id="promptIdResult">—</span></div>
+      <div class="metric"><strong>Accuracy</strong><span id="accuracyResult">—</span></div>
+      <div class="metric"><strong>Typing speed</strong><span id="wpmResult">—</span></div>
+      <div class="metric"><strong>Time</strong><span id="timeResult">—</span></div>
+      <div class="metric"><strong>Prompt</strong><span id="promptIdResult">—</span></div>
     </div>
   </div>
+</section>
 
 <script>
-// Replace this with the /exec URL from your deployed Google Apps Script web app.
 const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzh4JiznkUgiWW2VCUgRN1QSZ0VvkZlnaeG83WwJWPbYWBRW9mSsjMxfMhkV4ZVYKTq/exec";
 
 let targetPrompt = "";
@@ -109,16 +400,37 @@ let promptId = "";
 let assignmentId = "";
 let startTime = null;
 let submitted = false;
+let promptWordElements = [];
+let wordStartPositions = [];
 
-const typedBox = document.getElementById("typedText");
 const studyIdBox = document.getElementById("studyId");
+const typedBox = document.getElementById("typedText");
+
+function showScreen(id) {
+  document.querySelectorAll(".screen").forEach(screen => screen.classList.remove("active"));
+  document.getElementById(id).classList.add("active");
+}
+
+function updateVisibleHeight() {
+  const height = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  document.documentElement.style.setProperty("--app-height", `${Math.round(height)}px`);
+}
+
+window.addEventListener("resize", updateVisibleHeight);
+window.addEventListener("orientationchange", updateVisibleHeight);
+if (window.visualViewport) {
+  window.visualViewport.addEventListener("resize", updateVisibleHeight);
+  window.visualViewport.addEventListener("scroll", updateVisibleHeight);
+}
+updateVisibleHeight();
 
 function getStudyIdFromUrl() {
-  const id = new URLSearchParams(window.location.search).get("id");
-  studyIdBox.value = id ? id.trim().toUpperCase() : "";
+  const rawId = new URLSearchParams(window.location.search).get("id");
+  const id = rawId ? rawId.trim().toUpperCase() : "";
+  studyIdBox.value = id;
+
   if (!id) {
-    document.getElementById("setupStatus").textContent = "This link is missing a Study ID. Ask the study team for the correct participant-specific link.";
-    document.getElementById("setupStatus").className = "status error";
+    setSetupStatus("This link is missing a Study ID. Ask the study team for the correct link.", "error");
     document.getElementById("beginButton").disabled = true;
   }
 }
@@ -136,7 +448,7 @@ async function beginAssessment() {
 
   button.disabled = true;
   document.getElementById("visit").disabled = true;
-  setSetupStatus("Assigning an unused prompt...", "");
+  setSetupStatus("Assigning an unused prompt…", "");
 
   try {
     const url = `${SCRIPT_URL}?action=assignPrompt&study_id=${encodeURIComponent(studyId)}&visit=${encodeURIComponent(visit)}`;
@@ -148,14 +460,21 @@ async function beginAssessment() {
     promptId = data.prompt_id;
     targetPrompt = data.prompt_text;
     assignmentId = data.assignment_id;
+    startTime = null;
+    submitted = false;
 
-    document.getElementById("promptText").textContent = targetPrompt;
-    typedBox.disabled = false;
+    buildPrompt(targetPrompt);
     typedBox.value = "";
-    typedBox.focus();
+    typedBox.disabled = false;
     document.getElementById("submitButton").disabled = false;
-    setSetupStatus(`Prompt assigned.`, "success");
-    document.getElementById("testStatus").textContent = "Timer starts on the first typed character. Backspace and Delete are disabled.";
+    document.getElementById("testIdentity").textContent = `${studyId} · ${visit}`;
+    updateProgress();
+    showScreen("testScreen");
+
+    requestAnimationFrame(() => {
+      updateVisibleHeight();
+      typedBox.focus({ preventScroll: true });
+    });
   } catch (error) {
     setSetupStatus(error.message, "error");
     button.disabled = false;
@@ -163,44 +482,113 @@ async function beginAssessment() {
   }
 }
 
+function buildPrompt(text) {
+  const viewport = document.getElementById("promptViewport");
+  viewport.innerHTML = "";
+  promptWordElements = [];
+  wordStartPositions = [];
+
+  const matches = [...text.matchAll(/\S+/g)];
+  matches.forEach((match, index) => {
+    const span = document.createElement("span");
+    span.className = "prompt-word";
+    span.textContent = match[0];
+    viewport.appendChild(span);
+    promptWordElements.push(span);
+    wordStartPositions.push(match.index);
+
+    if (index < matches.length - 1) {
+      viewport.appendChild(document.createTextNode(" "));
+    }
+  });
+
+  if (promptWordElements.length) promptWordElements[0].classList.add("current");
+  viewport.scrollTop = 0;
+}
+
+function currentWordIndex(characterPosition) {
+  let index = 0;
+  for (let i = 0; i < wordStartPositions.length; i++) {
+    if (wordStartPositions[i] <= characterPosition) index = i;
+    else break;
+  }
+  return index;
+}
+
+function updatePromptFocus() {
+  if (!promptWordElements.length) return;
+
+  const typedLength = typedBox.value.length;
+  const activeIndex = Math.min(currentWordIndex(typedLength), promptWordElements.length - 1);
+
+  promptWordElements.forEach((el, index) => {
+    el.classList.toggle("completed", index < activeIndex);
+    el.classList.toggle("current", index === activeIndex);
+  });
+
+  const active = promptWordElements[activeIndex];
+  const viewport = document.getElementById("promptViewport");
+  const desiredTop = active.offsetTop - viewport.clientHeight * 0.38;
+  viewport.scrollTo({ top: Math.max(0, desiredTop), behavior: "smooth" });
+}
+
+function updateProgress() {
+  const typedLength = typedBox.value.length;
+  const promptLength = targetPrompt.length || 0;
+  const percent = promptLength ? Math.min(100, Math.round((typedLength / promptLength) * 100)) : 0;
+
+  document.getElementById("progressFill").style.width = `${percent}%`;
+  document.getElementById("progressNumber").textContent = `${percent}%`;
+  document.getElementById("characterCount").textContent = `${typedLength} / ${promptLength}`;
+  updatePromptFocus();
+}
+
 typedBox.addEventListener("keydown", event => {
   if (event.key === "Enter") {
     event.preventDefault();
     return;
   }
+
   if (event.key === "Backspace" || event.key === "Delete") {
     event.preventDefault();
     document.getElementById("testStatus").textContent = "Backspace and Delete are disabled.";
-    document.getElementById("testStatus").className = "status error";
+    document.getElementById("testStatus").className = "error";
     return;
   }
+
   if (!startTime && event.key.length === 1) {
     startTime = new Date();
-    document.getElementById("testStatus").textContent = "Assessment in progress...";
-    document.getElementById("testStatus").className = "status";
+    document.getElementById("testStatus").textContent = "Assessment in progress";
+    document.getElementById("testStatus").className = "";
   }
 });
 
-// Also blocks common mobile/browser editing paths.
 typedBox.addEventListener("beforeinput", event => {
   if (event.inputType && (
-      event.inputType.startsWith("delete") ||
-      event.inputType === "insertLineBreak" ||
-      event.inputType === "insertParagraph"
-    )) {
+    event.inputType.startsWith("delete") ||
+    event.inputType === "insertLineBreak" ||
+    event.inputType === "insertParagraph"
+  )) {
     event.preventDefault();
   }
+
+  if (!startTime && event.inputType && event.inputType.startsWith("insert")) {
+    startTime = new Date();
+  }
+});
+
+typedBox.addEventListener("input", () => {
+  typedBox.scrollLeft = typedBox.scrollWidth;
+  updateProgress();
 });
 
 typedBox.addEventListener("paste", event => event.preventDefault());
 typedBox.addEventListener("drop", event => event.preventDefault());
-typedBox.addEventListener("input", () => {
-  typedBox.scrollLeft = typedBox.scrollWidth;
-});
+typedBox.addEventListener("cut", event => event.preventDefault());
 
 async function submitTest() {
   if (submitted) return;
-  if (!startTime) {
+  if (!startTime || !typedBox.value.length) {
     alert("No typing was detected.");
     return;
   }
@@ -231,11 +619,9 @@ async function submitTest() {
   submitted = true;
   typedBox.disabled = true;
   document.getElementById("submitButton").disabled = true;
-  document.getElementById("testStatus").textContent = "Saving results...";
-  document.getElementById("testStatus").className = "status";
+  document.getElementById("testStatus").textContent = "Saving…";
 
   try {
-    // text/plain avoids a browser CORS preflight while Apps Script still receives JSON text.
     await fetch(SCRIPT_URL, {
       method: "POST",
       mode: "no-cors",
@@ -244,21 +630,26 @@ async function submitTest() {
     });
 
     displayResults(record);
-    document.getElementById("testStatus").textContent = "Assessment submitted. You may now close this page.";
-    document.getElementById("testStatus").className = "status success";
+    typedBox.blur();
+    showScreen("completeScreen");
+    updateVisibleHeight();
   } catch (error) {
     submitted = false;
     typedBox.disabled = false;
     document.getElementById("submitButton").disabled = false;
-    document.getElementById("testStatus").textContent = "The result could not be sent. Check the internet connection and submit again.";
-    document.getElementById("testStatus").className = "status error";
+    document.getElementById("testStatus").textContent = "Could not send. Check your connection and submit again.";
+    document.getElementById("testStatus").className = "error";
   }
 }
 
 function calculateScore(prompt, typed, timeSec) {
   let correct = 0;
   const maxLen = Math.max(prompt.length, typed.length);
-  for (let i = 0; i < maxLen; i++) if (typed[i] === prompt[i]) correct++;
+
+  for (let i = 0; i < maxLen; i++) {
+    if (typed[i] === prompt[i]) correct++;
+  }
+
   const errors = maxLen - correct;
   const accuracy = maxLen ? (correct / maxLen) * 100 : 0;
   const wpm = timeSec > 0 ? (typed.length / 5) / (timeSec / 60) : 0;
@@ -266,12 +657,17 @@ function calculateScore(prompt, typed, timeSec) {
 }
 
 function displayResults(record) {
-  document.getElementById("resultsCard").hidden = false;
-  document.getElementById("timeResult").textContent = `${record.time_sec} sec`;
-  document.getElementById("wpmResult").textContent = record.wpm;
   document.getElementById("accuracyResult").textContent = `${record.accuracy_percent}%`;
-  document.getElementById("errorResult").textContent = record.error_count;
+  document.getElementById("wpmResult").textContent = `${record.wpm} WPM`;
+  document.getElementById("timeResult").textContent = formatTime(Number(record.time_sec));
   document.getElementById("promptIdResult").textContent = record.prompt_id;
+}
+
+function formatTime(seconds) {
+  const rounded = Math.round(seconds);
+  const minutes = Math.floor(rounded / 60);
+  const remainder = rounded % 60;
+  return minutes ? `${minutes}:${String(remainder).padStart(2, "0")}` : `${remainder} sec`;
 }
 
 function setSetupStatus(message, type) {
@@ -279,6 +675,9 @@ function setSetupStatus(message, type) {
   el.textContent = message;
   el.className = `status ${type}`;
 }
+
+document.getElementById("beginButton").addEventListener("click", beginAssessment);
+document.getElementById("submitButton").addEventListener("click", submitTest);
 
 getStudyIdFromUrl();
 </script>
